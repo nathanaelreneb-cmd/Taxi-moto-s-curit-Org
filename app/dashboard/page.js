@@ -29,7 +29,7 @@ export default function Dashboard() {
     if (currentProfile.role === 'agent') {
       const { data } = await supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone)')
+        .select('*, chauffeurs(nom, prenom, telephone, photo_url)')
         .eq('saisi_par', currentUser.id)
         .order('created_at', { ascending: false });
       setMesFiches(data || []);
@@ -38,7 +38,7 @@ export default function Dashboard() {
     if (currentProfile.role === 'responsable' || currentProfile.role === 'admin') {
       let query = supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
+        .select('*, chauffeurs(nom, prenom, telephone, photo_url), gares(nom)')
         .eq('statut_verification', 'en_attente')
         .order('created_at', { ascending: true });
       if (currentProfile.role === 'responsable') {
@@ -49,7 +49,7 @@ export default function Dashboard() {
 
       let registreQuery = supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
+        .select('*, chauffeurs(nom, prenom, telephone, photo_url), gares(nom)')
         .order('created_at', { ascending: false });
       if (currentProfile.role === 'responsable') {
         registreQuery = registreQuery.eq('gare_id', currentProfile.gare_id);
@@ -92,6 +92,16 @@ export default function Dashboard() {
     router.replace('/login');
   }
 
+  async function uploadPhoto(file, folder) {
+    if (!file || file.size === 0) return null;
+    const ext = file.name.split('.').pop();
+    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('fiches-photos').upload(path, file);
+    if (error) throw new Error(`Upload photo (${folder}) : ${error.message}`);
+    const { data } = supabase.storage.from('fiches-photos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
   async function handleRegister(e) {
     e.preventDefault();
     setMsg('');
@@ -100,6 +110,18 @@ export default function Dashboard() {
 
     if (!gareId) {
       setMsg("Impossible d'enregistrer : aucune gare assignée à votre compte. Contactez un admin.");
+      return;
+    }
+
+    setMsg('Envoi en cours...');
+
+    let photoChauffeurUrl = null;
+    let photoMotoUrl = null;
+    try {
+      photoChauffeurUrl = await uploadPhoto(form.photo_chauffeur.files[0], 'chauffeurs');
+      photoMotoUrl = await uploadPhoto(form.photo_moto.files[0], 'motos');
+    } catch (err) {
+      setMsg(err.message);
       return;
     }
 
@@ -113,6 +135,7 @@ export default function Dashboard() {
         permis_numero: form.permis.value || null,
         contact_urgence_nom: form.urgence_nom.value || null,
         contact_urgence_telephone: form.urgence_tel.value || null,
+        photo_url: photoChauffeurUrl,
         gare_id: gareId,
         qr_code: shortCode('CH'),
         saisi_par: user.id,
@@ -132,6 +155,7 @@ export default function Dashboard() {
       marque: form.marque.value || null,
       modele: form.modele.value || null,
       couleur: form.couleur.value || null,
+      photo_url: photoMotoUrl,
       gare_id: gareId,
       qr_code: shortCode('MT'),
       saisi_par: user.id,
@@ -268,6 +292,8 @@ export default function Dashboard() {
             <input id="urgence_nom" name="urgence_nom" />
             <label htmlFor="urgence_tel">Contact d&rsquo;urgence — téléphone</label>
             <input id="urgence_tel" name="urgence_tel" />
+            <label htmlFor="photo_chauffeur">Photo du chauffeur</label>
+            <input id="photo_chauffeur" name="photo_chauffeur" type="file" accept="image/*" capture="environment" />
 
             <label htmlFor="plaque">Plaque d&rsquo;immatriculation</label>
             <input id="plaque" name="plaque" data-mono="true" required />
@@ -285,6 +311,8 @@ export default function Dashboard() {
             </div>
             <label htmlFor="couleur">Couleur</label>
             <input id="couleur" name="couleur" />
+            <label htmlFor="photo_moto">Photo de la moto</label>
+            <input id="photo_moto" name="photo_moto" type="file" accept="image/*" capture="environment" />
 
             {msg && <p className="hint" style={{ color: 'var(--accent)' }}>{msg}</p>}
             <button className="btn-primary" type="submit">Enregistrer la fiche</button>
@@ -326,6 +354,16 @@ export default function Dashboard() {
                 </div>
                 <QRCodeSVG value={m.qr_code} size={44} bgColor="transparent" fgColor="#f2ede1" />
               </div>
+              {(m.chauffeurs?.photo_url || m.photo_url) && (
+                <div className="row" style={{ marginTop: 10 }}>
+                  {m.chauffeurs?.photo_url && (
+                    <img src={m.chauffeurs.photo_url} alt="Chauffeur" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+                  )}
+                  {m.photo_url && (
+                    <img src={m.photo_url} alt="Moto" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+                  )}
+                </div>
+              )}
               <div className="row" style={{ marginTop: 10 }}>
                 <button className="btn-verify" onClick={() => handleDecision(m, 'verifie')}>Valider</button>
                 <button className="btn-reject" onClick={() => handleDecision(m, 'rejete')}>Rejeter</button>
