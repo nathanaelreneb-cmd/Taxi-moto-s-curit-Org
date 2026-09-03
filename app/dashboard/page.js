@@ -2,8 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabaseClient';
+
+const MotoMap = dynamic(() => import('./MotoMap'), { ssr: false });
 
 function shortCode(prefix) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -21,6 +24,9 @@ export default function Dashboard() {
   const [registre, setRegistre] = useState([]);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
+  const [traccarConfigured, setTraccarConfigured] = useState(null);
+  const [traccarDevices, setTraccarDevices] = useState([]);
+  const [traccarError, setTraccarError] = useState('');
 
   const loadEverything = useCallback(async (currentUser, currentProfile) => {
     const { data: garesData } = await supabase.from('gares').select('*').order('nom');
@@ -202,6 +208,30 @@ export default function Dashboard() {
     loadEverything(user, profile);
   }
 
+  async function handleSetBoitier(motoId, value) {
+    await supabase.from('motos').update({ gps_boitier_id: value || null }).eq('id', motoId);
+    loadEverything(user, profile);
+  }
+
+  const loadTraccar = useCallback(async () => {
+    try {
+      const res = await fetch('/api/traccar/status');
+      const data = await res.json();
+      setTraccarConfigured(data.configured);
+      setTraccarDevices(data.devices || []);
+      setTraccarError(data.error || '');
+    } catch (e) {
+      setTraccarError("Impossible de contacter l'app pour les données GPS.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'carte') return;
+    loadTraccar();
+    const interval = setInterval(loadTraccar, 20000);
+    return () => clearInterval(interval);
+  }, [tab, loadTraccar]);
+
   if (loading) return null;
 
   if (!profile) {
@@ -235,7 +265,7 @@ export default function Dashboard() {
 
   const tabs = ['enregistrer'];
   if (profile.role === 'agent') tabs.push('mes-fiches');
-  if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider', 'registre');
+  if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider', 'registre', 'carte');
   if (profile.role === 'admin') tabs.push('gares', 'agents');
 
   return (
@@ -256,6 +286,7 @@ export default function Dashboard() {
               'mes-fiches': 'Mes fiches',
               valider: `Valider${aValider.length ? ` (${aValider.length})` : ''}`,
               registre: 'Registre',
+              carte: 'Carte',
               gares: 'Gares',
               agents: 'Agents',
             }[t]}
@@ -389,6 +420,22 @@ export default function Dashboard() {
                 </div>
                 <span className={`status status-${m.statut_verification}`}>{m.statut_verification}</span>
               </div>
+              {profile.role === 'admin' && (
+                <div className="row" style={{ marginTop: 10 }}>
+                  <input
+                    placeholder="ID boîtier GPS (IMEI)"
+                    defaultValue={m.gps_boitier_id || ''}
+                    data-mono="true"
+                    id={`boitier-${m.id}`}
+                  />
+                  <button
+                    className="btn-ghost"
+                    onClick={() => handleSetBoitier(m.id, document.getElementById(`boitier-${m.id}`).value)}
+                  >
+                    Associer
+                  </button>
+                </div>
+              )}
               {m.statut_verification !== 'en_attente' && (
                 <div className="row" style={{ marginTop: 10 }}>
                   <button className="btn-ghost" onClick={() => handleDecision(m, 'en_attente')}>
@@ -398,6 +445,47 @@ export default function Dashboard() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'carte' && (
+        <div className="card">
+          <h2>Localisation en direct</h2>
+          {traccarConfigured === false && (
+            <p className="hint">
+              Traccar n&rsquo;est pas encore connecté. Ajoutez <code>TRACCAR_URL</code>,{' '}
+              <code>TRACCAR_EMAIL</code> et <code>TRACCAR_PASSWORD</code> dans les variables
+              d&rsquo;environnement Vercel, puis redéployez.
+            </p>
+          )}
+          {traccarError && <p className="error">{traccarError}</p>}
+          {traccarConfigured && (() => {
+            const points = registre
+              .filter((m) => m.gps_boitier_id)
+              .map((m) => {
+                const device = traccarDevices.find((d) => d.uniqueId === m.gps_boitier_id);
+                if (!device || device.latitude == null) return null;
+                return {
+                  uniqueId: m.gps_boitier_id,
+                  label: `${m.chauffeurs?.nom || ''} ${m.chauffeurs?.prenom || ''} · ${m.plaque_immatriculation}`,
+                  latitude: device.latitude,
+                  longitude: device.longitude,
+                  speed: device.speed,
+                  fixTime: device.fixTime,
+                };
+              })
+              .filter(Boolean);
+
+            if (points.length === 0) {
+              return (
+                <p className="empty">
+                  Aucune moto équipée et positionnée pour l&rsquo;instant. Associez un ID de boîtier
+                  GPS à une moto depuis l&rsquo;onglet Registre une fois le traceur installé.
+                </p>
+              );
+            }
+            return <MotoMap points={points} />;
+          })()}
         </div>
       )}
 
