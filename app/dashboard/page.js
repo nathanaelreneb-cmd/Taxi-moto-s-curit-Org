@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState('enregistrer');
   const [mesFiches, setMesFiches] = useState([]);
   const [aValider, setAValider] = useState([]);
+  const [registre, setRegistre] = useState([]);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
 
@@ -45,6 +46,16 @@ export default function Dashboard() {
       }
       const { data } = await query;
       setAValider(data || []);
+
+      let registreQuery = supabase
+        .from('motos')
+        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
+        .order('created_at', { ascending: false });
+      if (currentProfile.role === 'responsable') {
+        registreQuery = registreQuery.eq('gare_id', currentProfile.gare_id);
+      }
+      const { data: registreData } = await registreQuery;
+      setRegistre(registreData || []);
     }
 
     if (currentProfile.role === 'admin') {
@@ -200,7 +211,7 @@ export default function Dashboard() {
 
   const tabs = ['enregistrer'];
   if (profile.role === 'agent') tabs.push('mes-fiches');
-  if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider');
+  if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider', 'registre');
   if (profile.role === 'admin') tabs.push('gares', 'agents');
 
   return (
@@ -220,6 +231,7 @@ export default function Dashboard() {
               enregistrer: 'Enregistrer',
               'mes-fiches': 'Mes fiches',
               valider: `Valider${aValider.length ? ` (${aValider.length})` : ''}`,
+              registre: 'Registre',
               gares: 'Gares',
               agents: 'Agents',
             }[t]}
@@ -318,6 +330,34 @@ export default function Dashboard() {
                 <button className="btn-verify" onClick={() => handleDecision(m, 'verifie')}>Valider</button>
                 <button className="btn-reject" onClick={() => handleDecision(m, 'rejete')}>Rejeter</button>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'registre' && (
+        <div className="card">
+          <h2>Toutes les fiches</h2>
+          {registre.length === 0 && <p className="empty">Aucune fiche enregistrée pour l&rsquo;instant.</p>}
+          {registre.map((m) => (
+            <div className="entry" key={m.id}>
+              <div className="entry-head">
+                <div>
+                  <div className="entry-title">{m.chauffeurs?.nom} {m.chauffeurs?.prenom}</div>
+                  <div className="entry-sub">
+                    {m.plaque_immatriculation} · {m.chauffeurs?.telephone}
+                    {m.gares ? ` · ${m.gares.nom}` : ''}
+                  </div>
+                </div>
+                <span className={`status status-${m.statut_verification}`}>{m.statut_verification}</span>
+              </div>
+              {m.statut_verification !== 'en_attente' && (
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button className="btn-ghost" onClick={() => handleDecision(m, 'en_attente')}>
+                    Remettre en attente
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
