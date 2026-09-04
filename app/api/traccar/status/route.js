@@ -23,11 +23,7 @@ export async function GET() {
 
     if (!devicesRes.ok || !positionsRes.ok) {
       return Response.json(
-        {
-          configured: true,
-          error: `Traccar injoignable — devices:${devicesRes.status} positions:${positionsRes.status}`,
-          devices: [],
-        },
+        { configured: true, error: 'Traccar injoignable — vérifiez les identifiants.', devices: [] },
         { status: 502 }
       );
     }
@@ -49,17 +45,8 @@ export async function GET() {
       };
     });
 
-    const debugLine =
-      `DEBUG — ${devices.length} appareil(s), ${positions.length} position(s). ` +
-      devices
-        .map(
-          (d) =>
-            `[${d.uniqueId}] status=${d.status} positionId=${d.positionId ?? 'aucun'} lastUpdate=${d.lastUpdate ?? 'jamais'}`
-        )
-        .join(' | ');
-
-    return Response.json({ configured: true, devices: merged, error: debugLine });
+    return Response.json({ configured: true, devices: merged });
   } catch (e) {
-    return Response.json({ configured: true, error: 'DEBUG exception: ' + e.message, devices: [] }, { status: 502 });
+    return Response.json({ configured: true, error: e.message, devices: [] }, { status: 502 });
   }
 }
