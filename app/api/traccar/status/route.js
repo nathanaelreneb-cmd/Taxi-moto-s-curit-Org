@@ -42,6 +42,7 @@ export async function GET() {
         longitude: pos ? pos.longitude : null,
         speed: pos ? pos.speed : null,
         fixTime: pos ? pos.fixTime : null,
+        accuracy: pos ? pos.accuracy : null,
       };
     });
 
