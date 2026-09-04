@@ -48,11 +48,20 @@ export default function MotoMap({ points }) {
 
   return (
     <div>
+      <style jsx global>{`
+        .leaflet-container {
+          touch-action: pan-x pan-y;
+        }
+      `}</style>
       {userError && <p className="hint" style={{ marginBottom: 8 }}>{userError}</p>}
       <MapContainer
         center={center}
         zoom={points.length ? 16 : 7}
         style={{ height: 420, width: '100%', borderRadius: 6 }}
+        tap={true}
+        touchZoom={true}
+        doubleClickZoom={true}
+        scrollWheelZoom={true}
       >
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="Plan">
@@ -65,6 +74,8 @@ export default function MotoMap({ points }) {
             <TileLayer
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               attribution="Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics"
+              maxNativeZoom={19}
+              maxZoom={22}
             />
           </LayersControl.BaseLayer>
         </LayersControl>
