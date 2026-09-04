@@ -49,8 +49,14 @@ export async function GET() {
       };
     });
 
-    const debugLine = `DEBUG — ${devices.length} appareil(s) Traccar, ${positions.length} position(s) reçue(s). Détail: ` +
-      merged.map((m) => `${m.uniqueId}=${m.latitude != null ? 'position OK' : 'sans position'}`).join(', ');
+    const debugLine =
+      `DEBUG — ${devices.length} appareil(s), ${positions.length} position(s). ` +
+      devices
+        .map(
+          (d) =>
+            `[${d.uniqueId}] status=${d.status} positionId=${d.positionId ?? 'aucun'} lastUpdate=${d.lastUpdate ?? 'jamais'}`
+        )
+        .join(' | ');
 
     return Response.json({ configured: true, devices: merged, error: debugLine });
   } catch (e) {
