@@ -11,6 +11,12 @@ const icon = L.divIcon({
   iconSize: [14, 14],
 });
 
+const stolenIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:18px;height:18px;border-radius:50%;background:#d64545;border:3px solid #101c1e;box-shadow:0 0 0 4px rgba(214,69,69,0.35);"></div>',
+  iconSize: [18, 18],
+});
+
 const CONAKRY = [9.6412, -13.5784];
 
 function distanceMeters(lat1, lon1, lat2, lon2) {
@@ -51,6 +57,12 @@ export default function MotoMap({ points }) {
       <style jsx global>{`
         .leaflet-container {
           touch-action: pan-x pan-y;
+        }
+        .moto-label-stolen {
+          background: #3a1414 !important;
+          color: #ffd6d6 !important;
+          border: 1px solid #d64545 !important;
+          font-weight: bold;
         }
       `}</style>
       {userError && <p className="hint" style={{ marginBottom: 8 }}>{userError}</p>}
@@ -93,8 +105,13 @@ export default function MotoMap({ points }) {
         {points.map((p) => {
           const dist = userPos ? distanceMeters(userPos.lat, userPos.lng, p.latitude, p.longitude) : null;
           return (
-            <Marker key={p.uniqueId} position={[p.latitude, p.longitude]} icon={icon}>
-              <Tooltip permanent direction="top" offset={[0, -8]} className="moto-label">
+            <Marker key={p.uniqueId} position={[p.latitude, p.longitude]} icon={p.stolen ? stolenIcon : icon}>
+              <Tooltip
+                permanent
+                direction="top"
+                offset={[0, -8]}
+                className={p.stolen ? 'moto-label moto-label-stolen' : 'moto-label'}
+              >
                 <b>{p.label}</b>
                 <br />
                 {p.speed != null ? `${Math.round(p.speed * 1.852)} km/h` : 'Vitesse inconnue'}

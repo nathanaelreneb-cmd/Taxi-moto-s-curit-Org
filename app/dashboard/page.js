@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [mesFiches, setMesFiches] = useState([]);
   const [aValider, setAValider] = useState([]);
   const [registre, setRegistre] = useState([]);
+  const [alertes, setAlertes] = useState([]);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
   const [traccarConfigured, setTraccarConfigured] = useState(null);
@@ -39,6 +40,16 @@ export default function Dashboard() {
         .eq('saisi_par', currentUser.id)
         .order('created_at', { ascending: false });
       setMesFiches(data || []);
+
+      let agentRegistreQuery = supabase
+        .from('motos')
+        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
+        .order('created_at', { ascending: false });
+      if (currentProfile.gare_id) {
+        agentRegistreQuery = agentRegistreQuery.eq('gare_id', currentProfile.gare_id);
+      }
+      const { data: agentRegistreData } = await agentRegistreQuery;
+      setRegistre(agentRegistreData || []);
     }
 
     if (currentProfile.role === 'responsable' || currentProfile.role === 'admin') {
@@ -63,6 +74,13 @@ export default function Dashboard() {
       const { data: registreData } = await registreQuery;
       setRegistre(registreData || []);
     }
+
+    const { data: alertesData } = await supabase
+      .from('motos')
+      .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
+      .eq('statut', 'volee')
+      .order('updated_at', { ascending: false });
+    setAlertes(alertesData || []);
 
     if (currentProfile.role === 'admin') {
       const { data } = await supabase.from('profiles').select('*, gares(nom)').order('created_at');
@@ -213,6 +231,11 @@ export default function Dashboard() {
     loadEverything(user, profile);
   }
 
+  async function handleSetStatut(motoId, statut) {
+    await supabase.from('motos').update({ statut }).eq('id', motoId);
+    loadEverything(user, profile);
+  }
+
   const loadTraccar = useCallback(async () => {
     try {
       const res = await fetch('/api/traccar/status');
@@ -264,8 +287,9 @@ export default function Dashboard() {
   }
 
   const tabs = ['enregistrer'];
-  if (profile.role === 'agent') tabs.push('mes-fiches');
+  if (profile.role === 'agent') tabs.push('mes-fiches', 'registre');
   if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider', 'registre', 'carte');
+  tabs.push('alertes');
   if (profile.role === 'admin') tabs.push('gares', 'agents');
 
   return (
@@ -287,6 +311,7 @@ export default function Dashboard() {
               valider: `Valider${aValider.length ? ` (${aValider.length})` : ''}`,
               registre: 'Registre',
               carte: 'Carte',
+              alertes: `Alertes${alertes.length ? ` (${alertes.length})` : ''}`,
               gares: 'Gares',
               agents: 'Agents',
             }[t]}
@@ -443,6 +468,51 @@ export default function Dashboard() {
                   </button>
                 </div>
               )}
+              <div className="row" style={{ marginTop: 10 }}>
+                {m.statut === 'volee' ? (
+                  <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
+                    Marquer récupérée
+                  </button>
+                ) : (
+                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee')}>
+                    Signaler volée / perdue
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'alertes' && (
+        <div className="card">
+          <h2>Motos signalées volées ou perdues</h2>
+          {alertes.length === 0 && (
+            <p className="empty">Aucune moto signalée pour l&rsquo;instant — tout est en ordre.</p>
+          )}
+          {alertes.map((m) => (
+            <div className="entry" key={m.id}>
+              <div className="entry-head">
+                <div>
+                  <div className="entry-title">{m.chauffeurs?.nom} {m.chauffeurs?.prenom}</div>
+                  <div className="entry-sub">
+                    {m.plaque_immatriculation} · {m.chauffeurs?.telephone}
+                    {m.gares ? ` · ${m.gares.nom}` : ''}
+                    {m.gps_boitier_id ? ' · GPS disponible' : ' · pas de GPS'}
+                  </div>
+                </div>
+                <span className="status status-rejete">volée</span>
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
+                  Marquer récupérée
+                </button>
+                {m.gps_boitier_id && (
+                  <button className="btn-ghost" onClick={() => setTab('carte')}>
+                    Voir sur la carte
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -467,12 +537,13 @@ export default function Dashboard() {
                 if (!device || device.latitude == null) return null;
                 return {
                   uniqueId: m.gps_boitier_id,
-                  label: `${m.chauffeurs?.nom || ''} ${m.chauffeurs?.prenom || ''} · ${m.plaque_immatriculation}`,
+                  label: `${m.statut === 'volee' ? '🚨 VOLÉE — ' : ''}${m.chauffeurs?.nom || ''} ${m.chauffeurs?.prenom || ''} · ${m.plaque_immatriculation}`,
                   latitude: device.latitude,
                   longitude: device.longitude,
                   speed: device.speed,
                   fixTime: device.fixTime,
                   accuracy: device.accuracy,
+                  stolen: m.statut === 'volee',
                 };
               })
               .filter(Boolean);
