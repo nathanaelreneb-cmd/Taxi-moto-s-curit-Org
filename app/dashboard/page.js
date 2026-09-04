@@ -500,7 +500,10 @@ export default function Dashboard() {
             <div className="entry" key={m.id}>
               <div className="entry-head">
                 <div>
-                  <div className="entry-title">{m.chauffeurs?.nom} {m.chauffeurs?.prenom}</div>
+                  <div className="entry-title">
+                    {m.chauffeurs?.nom} {m.chauffeurs?.prenom}
+                    {m.type_moto === 'personnel' ? ' 🏍️ (personnelle)' : ''}
+                  </div>
                   <div className="entry-sub">
                     {m.plaque_immatriculation} · {m.chauffeurs?.telephone}
                     {m.gares ? ` · ${m.gares.nom}` : ''}
