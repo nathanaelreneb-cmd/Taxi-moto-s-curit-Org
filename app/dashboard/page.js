@@ -78,7 +78,7 @@ export default function Dashboard() {
     const { data: alertesData } = await supabase
       .from('motos')
       .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
-      .eq('statut', 'volee')
+      .in('statut', ['volee', 'signale_chauffeur'])
       .order('updated_at', { ascending: false });
     setAlertes(alertesData || []);
 
@@ -501,9 +501,16 @@ export default function Dashboard() {
                     {m.gps_boitier_id ? ' · GPS disponible' : ' · pas de GPS'}
                   </div>
                 </div>
-                <span className="status status-rejete">volée</span>
+                <span className={`status ${m.statut === 'volee' ? 'status-rejete' : 'status-en_attente'}`}>
+                  {m.statut === 'volee' ? 'volée confirmée' : 'signalée par le chauffeur'}
+                </span>
               </div>
-              <div className="row" style={{ marginTop: 10 }}>
+              <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+                {m.statut === 'signale_chauffeur' && (
+                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee')}>
+                    Confirmer le vol
+                  </button>
+                )}
                 <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
                   Marquer récupérée
                 </button>
