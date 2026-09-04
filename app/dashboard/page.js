@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { QRCodeSVG } from 'qrcode.react';
+import { subscribeToAlerts } from '../../lib/pushSubscribe';
 import { supabase } from '../../lib/supabaseClient';
 
 const MotoMap = dynamic(() => import('./MotoMap'), { ssr: false });
@@ -257,8 +258,18 @@ export default function Dashboard() {
     loadEverything(user, profile);
   }
 
-  async function handleSetStatut(motoId, statut) {
+  async function handleSetStatut(motoId, statut, moto) {
     await supabase.from('motos').update({ statut }).eq('id', motoId);
+    if (statut === 'volee') {
+      fetch('/api/notifier-vol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plaque: moto?.plaque_immatriculation,
+          gare: moto?.gares?.nom,
+        }),
+      }).catch(() => {});
+    }
     loadEverything(user, profile);
   }
 
@@ -270,6 +281,19 @@ export default function Dashboard() {
   function handlePrintFiche(m) {
     setFicheAImprimer(m);
     setTimeout(() => window.print(), 150);
+  }
+
+  async function handleSubscribeAlerts() {
+    const res = await subscribeToAlerts();
+    if (res.ok) {
+      alert('Alertes activées sur ce téléphone.');
+    } else if (res.reason === 'denied') {
+      alert("Autorisation refusée — activez les notifications pour ce site dans les réglages du navigateur.");
+    } else if (res.reason === 'unsupported') {
+      alert('Ce navigateur ne supporte pas les notifications.');
+    } else {
+      alert("Une erreur est survenue, réessayez.");
+    }
   }
 
   const loadTraccar = useCallback(async () => {
@@ -335,7 +359,10 @@ export default function Dashboard() {
           <h1>Sécurité Taxis-Motos</h1>
           <div className="who">{profile.nom} · {profile.role}{profile.gares ? ` · ${profile.gares.nom}` : ''}</div>
         </div>
-        <button className="btn-ghost" onClick={handleLogout}>Déconnexion</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={handleSubscribeAlerts}>🔔 Activer les alertes</button>
+          <button className="btn-ghost" onClick={handleLogout}>Déconnexion</button>
+        </div>
       </div>
 
       <div className="tabs">
@@ -510,7 +537,7 @@ export default function Dashboard() {
                     Marquer récupérée
                   </button>
                 ) : (
-                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee')}>
+                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee', m)}>
                     Signaler volée / perdue
                   </button>
                 )}
@@ -589,7 +616,7 @@ export default function Dashboard() {
               )}
               <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                 {m.statut === 'signale_chauffeur' && (
-                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee')}>
+                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee', m)}>
                     Confirmer le vol
                   </button>
                 )}
