@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Tooltip, LayersControl, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Tooltip, Popup, LayersControl, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -114,6 +114,10 @@ export default function MotoMap({ points }) {
                 offset={[0, -8]}
                 className={p.stolen ? 'moto-label moto-label-stolen' : 'moto-label'}
               >
+                {p.stolen ? '🚨 ' : ''}{p.label}
+                {isStale ? ' ⚠️' : ''}
+              </Tooltip>
+              <Popup>
                 <b>{p.label}</b>
                 <br />
                 {p.speed != null ? `${Math.round(p.speed * 1.852)} km/h` : 'Vitesse inconnue'}
@@ -123,7 +127,7 @@ export default function MotoMap({ points }) {
                 {isStale && (
                   <>
                     <br />
-                    <b style={{ color: '#ff8a3d' }}>
+                    <b style={{ color: '#b6503a' }}>
                       ⚠️ Signal non reçu depuis {Math.round(ageMinutes)} min — position peut-être dépassée
                     </b>
                   </>
@@ -134,7 +138,7 @@ export default function MotoMap({ points }) {
                     <b>{isStale ? `${formatDistance(dist)} (à l'ancienne position)` : `${formatDistance(dist)} de vous`}</b>
                   </>
                 )}
-              </Tooltip>
+              </Popup>
             </Marker>
           );
         })}
