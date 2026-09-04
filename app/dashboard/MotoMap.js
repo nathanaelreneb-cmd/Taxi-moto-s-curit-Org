@@ -104,6 +104,8 @@ export default function MotoMap({ points }) {
 
         {points.map((p) => {
           const dist = userPos ? distanceMeters(userPos.lat, userPos.lng, p.latitude, p.longitude) : null;
+          const ageMinutes = p.fixTime ? (Date.now() - new Date(p.fixTime).getTime()) / 60000 : null;
+          const isStale = ageMinutes != null && ageMinutes > 5;
           return (
             <Marker key={p.uniqueId} position={[p.latitude, p.longitude]} icon={p.stolen ? stolenIcon : icon}>
               <Tooltip
@@ -118,10 +120,18 @@ export default function MotoMap({ points }) {
                 {p.accuracy != null ? ` · précision ± ${Math.round(p.accuracy)} m` : ''}
                 <br />
                 {p.fixTime ? new Date(p.fixTime).toLocaleString('fr-FR') : ''}
+                {isStale && (
+                  <>
+                    <br />
+                    <b style={{ color: '#ff8a3d' }}>
+                      ⚠️ Signal non reçu depuis {Math.round(ageMinutes)} min — position peut-être dépassée
+                    </b>
+                  </>
+                )}
                 {dist != null && (
                   <>
                     <br />
-                    <b>{formatDistance(dist)} de vous</b>
+                    <b>{isStale ? `${formatDistance(dist)} (à l'ancienne position)` : `${formatDistance(dist)} de vous`}</b>
                   </>
                 )}
               </Tooltip>
