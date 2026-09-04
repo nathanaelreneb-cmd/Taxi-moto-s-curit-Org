@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const url = process.env.TRACCAR_URL;
   const email = process.env.TRACCAR_EMAIL;
