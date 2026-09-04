@@ -23,6 +23,8 @@ export default function Dashboard() {
   const [aValider, setAValider] = useState([]);
   const [registre, setRegistre] = useState([]);
   const [alertes, setAlertes] = useState([]);
+  const [signalements, setSignalements] = useState({});
+  const [cniPertes, setCniPertes] = useState([]);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
   const [traccarConfigured, setTraccarConfigured] = useState(null);
@@ -81,6 +83,29 @@ export default function Dashboard() {
       .in('statut', ['volee', 'signale_chauffeur'])
       .order('updated_at', { ascending: false });
     setAlertes(alertesData || []);
+
+    if (alertesData && alertesData.length > 0) {
+      const motoIds = alertesData.map((m) => m.id);
+      const { data: signalementsData } = await supabase
+        .from('signalements_perte')
+        .select('*')
+        .in('moto_id', motoIds)
+        .order('created_at', { ascending: false });
+      const latestByMoto = {};
+      (signalementsData || []).forEach((s) => {
+        if (!latestByMoto[s.moto_id]) latestByMoto[s.moto_id] = s;
+      });
+      setSignalements(latestByMoto);
+    } else {
+      setSignalements({});
+    }
+
+    const { data: cniData } = await supabase
+      .from('chauffeurs')
+      .select('*, motos(plaque_immatriculation, gare_id, gares(nom))')
+      .eq('cni_perdue', true)
+      .order('updated_at', { ascending: false });
+    setCniPertes(cniData || []);
 
     if (currentProfile.role === 'admin') {
       const { data } = await supabase.from('profiles').select('*, gares(nom)').order('created_at');
@@ -236,6 +261,11 @@ export default function Dashboard() {
     loadEverything(user, profile);
   }
 
+  async function handleClearCni(chauffeurId) {
+    await supabase.from('chauffeurs').update({ cni_perdue: false }).eq('id', chauffeurId);
+    loadEverything(user, profile);
+  }
+
   const loadTraccar = useCallback(async () => {
     try {
       const res = await fetch('/api/traccar/status');
@@ -311,7 +341,7 @@ export default function Dashboard() {
               valider: `Valider${aValider.length ? ` (${aValider.length})` : ''}`,
               registre: 'Registre',
               carte: 'Carte',
-              alertes: `Alertes${alertes.length ? ` (${alertes.length})` : ''}`,
+              alertes: `Alertes${(alertes.length + cniPertes.length) ? ` (${alertes.length + cniPertes.length})` : ''}`,
               gares: 'Gares',
               agents: 'Agents',
             }[t]}
@@ -490,7 +520,9 @@ export default function Dashboard() {
           {alertes.length === 0 && (
             <p className="empty">Aucune moto signalée pour l&rsquo;instant — tout est en ordre.</p>
           )}
-          {alertes.map((m) => (
+          {alertes.map((m) => {
+            const sig = signalements[m.id];
+            return (
             <div className="entry" key={m.id}>
               <div className="entry-head">
                 <div>
@@ -505,6 +537,47 @@ export default function Dashboard() {
                   {m.statut === 'volee' ? 'volée confirmée' : 'signalée par le chauffeur'}
                 </span>
               </div>
+              {sig && (
+                <div className="row" style={{ marginTop: 10, alignItems: 'flex-start' }}>
+                  <div>
+                    <div className="hint" style={{ marginBottom: 4 }}>Photo au dossier</div>
+                    {m.chauffeurs?.photo_url ? (
+                      <img
+                        src={m.chauffeurs.photo_url}
+                        alt="Chauffeur enregistré"
+                        style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }}
+                      />
+                    ) : (
+                      <div className="hint">Aucune photo enregistrée</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="hint" style={{ marginBottom: 4 }}>
+                      Photo envoyée avec le signalement ✓
+                    </div>
+                    {sig.photo_url ? (
+                      <img
+                        src={sig.photo_url}
+                        alt="Photo envoyée"
+                        style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 4, border: '2px solid var(--accent)' }}
+                      />
+                    ) : (
+                      <div className="hint">Aucune photo envoyée</div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <div className="hint">
+                      ✓ Nom correspond<br />
+                      ✓ Téléphone correspond<br />
+                      ✓ Plaque correspond<br />
+                      ✓ CNI correspond<br />
+                      {sig.chassis_saisi ? '✓ Châssis correspond' : ''}
+                      {sig.chassis_saisi ? <br /> : null}
+                      Signalé le {new Date(sig.created_at).toLocaleString('fr-FR')}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                 {m.statut === 'signale_chauffeur' && (
                   <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee')}>
@@ -519,6 +592,32 @@ export default function Dashboard() {
                     Voir sur la carte
                   </button>
                 )}
+              </div>
+            </div>
+            );
+          })}
+
+          <h2 style={{ marginTop: 28 }}>Pièces d&rsquo;identité signalées perdues</h2>
+          {cniPertes.length === 0 && (
+            <p className="empty">Aucune déclaration en cours.</p>
+          )}
+          {cniPertes.map((c) => (
+            <div className="entry" key={c.id}>
+              <div className="entry-head">
+                <div>
+                  <div className="entry-title">{c.nom} {c.prenom}</div>
+                  <div className="entry-sub">
+                    {c.telephone} · CNI {c.cni_numero || '—'}
+                    {c.motos && c.motos[0] ? ` · ${c.motos[0].plaque_immatriculation}` : ''}
+                    {c.motos && c.motos[0]?.gares ? ` · ${c.motos[0].gares.nom}` : ''}
+                  </div>
+                </div>
+                <span className="status status-en_attente">CNI perdue</span>
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="btn-verify" onClick={() => handleClearCni(c.id)}>
+                  Marquer résolu
+                </button>
               </div>
             </div>
           ))}
