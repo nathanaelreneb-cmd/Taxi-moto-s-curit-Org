@@ -10,7 +10,10 @@ export async function GET() {
   }
 
   const auth = Buffer.from(`${email}:${password}`).toString('base64');
-  const headers = { Authorization: `Basic ${auth}` };
+  const headers = {
+    Authorization: `Basic ${auth}`,
+    Accept: 'application/json',
+  };
 
   try {
     const [devicesRes, positionsRes] = await Promise.all([
@@ -42,7 +45,11 @@ export async function GET() {
       };
     });
 
-    return Response.json({ configured: true, devices: merged });
+    return Response.json({
+      configured: true,
+      devices: merged,
+      debug: { devicesCount: devices.length, positionsCount: positions.length },
+    });
   } catch (e) {
     return Response.json({ configured: true, error: e.message, devices: [] }, { status: 502 });
   }
