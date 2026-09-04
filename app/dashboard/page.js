@@ -35,7 +35,7 @@ export default function Dashboard() {
     if (currentProfile.role === 'agent') {
       const { data } = await supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone, photo_url)')
+        .select('*, chauffeurs(nom, prenom, telephone)')
         .eq('saisi_par', currentUser.id)
         .order('created_at', { ascending: false });
       setMesFiches(data || []);
@@ -44,7 +44,7 @@ export default function Dashboard() {
     if (currentProfile.role === 'responsable' || currentProfile.role === 'admin') {
       let query = supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone, photo_url), gares(nom)')
+        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
         .eq('statut_verification', 'en_attente')
         .order('created_at', { ascending: true });
       if (currentProfile.role === 'responsable') {
@@ -55,7 +55,7 @@ export default function Dashboard() {
 
       let registreQuery = supabase
         .from('motos')
-        .select('*, chauffeurs(nom, prenom, telephone, photo_url), gares(nom)')
+        .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
         .order('created_at', { ascending: false });
       if (currentProfile.role === 'responsable') {
         registreQuery = registreQuery.eq('gare_id', currentProfile.gare_id);
@@ -472,6 +472,7 @@ export default function Dashboard() {
                   longitude: device.longitude,
                   speed: device.speed,
                   fixTime: device.fixTime,
+                  accuracy: device.accuracy,
                 };
               })
               .filter(Boolean);
