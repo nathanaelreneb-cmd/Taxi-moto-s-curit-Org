@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [alertes, setAlertes] = useState([]);
   const [signalements, setSignalements] = useState({});
   const [cniPertes, setCniPertes] = useState([]);
+  const [ficheAImprimer, setFicheAImprimer] = useState(null);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
   const [traccarConfigured, setTraccarConfigured] = useState(null);
@@ -266,6 +267,11 @@ export default function Dashboard() {
     loadEverything(user, profile);
   }
 
+  function handlePrintFiche(m) {
+    setFicheAImprimer(m);
+    setTimeout(() => window.print(), 150);
+  }
+
   const loadTraccar = useCallback(async () => {
     try {
       const res = await fetch('/api/traccar/status');
@@ -498,7 +504,7 @@ export default function Dashboard() {
                   </button>
                 </div>
               )}
-              <div className="row" style={{ marginTop: 10 }}>
+              <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                 {m.statut === 'volee' ? (
                   <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
                     Marquer récupérée
@@ -508,6 +514,9 @@ export default function Dashboard() {
                     Signaler volée / perdue
                   </button>
                 )}
+                <button className="btn-ghost" onClick={() => handlePrintFiche(m)}>
+                  Imprimer la fiche chauffeur
+                </button>
               </div>
             </div>
           ))}
@@ -734,6 +743,36 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {ficheAImprimer && (
+        <div className="print-only">
+          <h1>Fiche de sécurité — Sécurité Taxis-Motos</h1>
+          <p>À conserver par le chauffeur. En cas de perte ou de vol de la moto, ou de la pièce
+          d&rsquo;identité, présentez cette fiche à votre gare ou scannez le code ci-dessous.</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
+            <tbody>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>Nom</td><td style={{ padding: 6 }}>{ficheAImprimer.chauffeurs?.nom} {ficheAImprimer.chauffeurs?.prenom}</td></tr>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>Téléphone</td><td style={{ padding: 6 }}>{ficheAImprimer.chauffeurs?.telephone}</td></tr>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>CNI</td><td style={{ padding: 6 }}>{ficheAImprimer.chauffeurs?.cni_numero || '—'}</td></tr>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>Plaque</td><td style={{ padding: 6 }}>{ficheAImprimer.plaque_immatriculation}</td></tr>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>Châssis</td><td style={{ padding: 6 }}>{ficheAImprimer.numero_chassis || '—'}</td></tr>
+              <tr><td style={{ padding: 6, fontWeight: 'bold' }}>Gare</td><td style={{ padding: 6 }}>{ficheAImprimer.gares?.nom || '—'}</td></tr>
+            </tbody>
+          </table>
+          <div style={{ marginTop: 20 }}>
+            <QRCodeSVG
+              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/signaler?nom=${encodeURIComponent(
+                `${ficheAImprimer.chauffeurs?.nom || ''} ${ficheAImprimer.chauffeurs?.prenom || ''}`.trim()
+              )}&telephone=${encodeURIComponent(ficheAImprimer.chauffeurs?.telephone || '')}&cni=${encodeURIComponent(
+                ficheAImprimer.chauffeurs?.cni_numero || ''
+              )}&plaque=${encodeURIComponent(ficheAImprimer.plaque_immatriculation || '')}&chassis=${encodeURIComponent(
+                ficheAImprimer.numero_chassis || ''
+              )}`}
+              size={140}
+            />
+            <p>Scannez ce code pour signaler une perte — vos informations se rempliront automatiquement.</p>
+          </div>
         </div>
       )}
     </div>
