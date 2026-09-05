@@ -27,6 +27,11 @@ export default function Dashboard() {
   const [signalements, setSignalements] = useState({});
   const [cniPertes, setCniPertes] = useState([]);
   const [ficheAImprimer, setFicheAImprimer] = useState(null);
+  const [expandedValider, setExpandedValider] = useState(null);
+  const [expandedRegistre, setExpandedRegistre] = useState(null);
+  const [rechercheRegistre, setRechercheRegistre] = useState('');
+  const [syndicatsListe, setSyndicatsListe] = useState([]);
+  const [nbMotosPersonnelles, setNbMotosPersonnelles] = useState(0);
   const [profils, setProfils] = useState([]);
   const [msg, setMsg] = useState('');
   const [traccarConfigured, setTraccarConfigured] = useState(null);
@@ -56,7 +61,7 @@ export default function Dashboard() {
       setRegistre(agentRegistreData || []);
     }
 
-    if (currentProfile.role === 'responsable' || currentProfile.role === 'admin') {
+    if (['responsable', 'admin', 'superadmin'].includes(currentProfile.role)) {
       let query = supabase
         .from('motos')
         .select('*, chauffeurs(nom, prenom, telephone), gares(nom)')
@@ -109,9 +114,38 @@ export default function Dashboard() {
       .order('updated_at', { ascending: false });
     setCniPertes(cniData || []);
 
-    if (currentProfile.role === 'admin') {
+    if (['admin', 'superadmin'].includes(currentProfile.role)) {
       const { data } = await supabase.from('profiles').select('*, gares(nom)').order('created_at');
       setProfils(data || []);
+    }
+
+    if (currentProfile.role === 'superadmin') {
+      const { data: syndicatsData } = await supabase.from('syndicats').select('*').order('created_at');
+      const withCounts = await Promise.all(
+        (syndicatsData || []).map(async (s) => {
+          const { count: nbAgents } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('syndicat_id', s.id);
+          const { count: nbChauffeurs } = await supabase
+            .from('chauffeurs')
+            .select('*', { count: 'exact', head: true })
+            .eq('syndicat_id', s.id);
+          const { count: nbMotos } = await supabase
+            .from('motos')
+            .select('*', { count: 'exact', head: true })
+            .eq('syndicat_id', s.id);
+          return { ...s, nbAgents, nbChauffeurs, nbMotos };
+        })
+      );
+      setSyndicatsListe(withCounts);
+
+      const { count: nbPersonnelles } = await supabase
+        .from('motos')
+        .select('*', { count: 'exact', head: true })
+        .is('syndicat_id', null)
+        .eq('type_moto', 'personnel');
+      setNbMotosPersonnelles(nbPersonnelles || 0);
     }
   }, []);
 
@@ -157,7 +191,7 @@ export default function Dashboard() {
     e.preventDefault();
     setMsg('');
     const form = e.target;
-    const gareId = profile.role === 'admin' ? form.gare_id.value : profile.gare_id;
+    const gareId = ['admin', 'superadmin'].includes(profile.role) ? form.gare_id.value : profile.gare_id;
 
     if (!gareId) {
       setMsg("Impossible d'enregistrer : aucune gare assignée à votre compte. Contactez un admin.");
@@ -351,9 +385,10 @@ export default function Dashboard() {
 
   const tabs = ['enregistrer'];
   if (profile.role === 'agent') tabs.push('mes-fiches', 'registre');
-  if (profile.role === 'responsable' || profile.role === 'admin') tabs.push('valider', 'registre', 'carte');
+  if (['responsable', 'admin', 'superadmin'].includes(profile.role)) tabs.push('valider', 'registre', 'carte');
   tabs.push('alertes');
-  if (profile.role === 'admin') tabs.push('gares', 'agents');
+  if (['admin', 'superadmin'].includes(profile.role)) tabs.push('gares', 'agents');
+  if (profile.role === 'superadmin') tabs.push('plateforme');
 
   return (
     <div className="shell">
@@ -380,6 +415,7 @@ export default function Dashboard() {
               alertes: `Alertes${(alertes.length + cniPertes.length) ? ` (${alertes.length + cniPertes.length})` : ''}`,
               gares: 'Gares',
               agents: 'Agents',
+              plateforme: 'Plateforme',
             }[t]}
           </button>
         ))}
@@ -464,95 +500,143 @@ export default function Dashboard() {
         <div className="card">
           <h2>Fiches en attente</h2>
           {aValider.length === 0 && <p className="empty">Rien à valider pour le moment.</p>}
-          {aValider.map((m) => (
+          {aValider.map((m) => {
+            const open = expandedValider === m.id;
+            return (
             <div className="entry" key={m.id}>
-              <div className="entry-head">
+              <div
+                className="entry-head"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setExpandedValider(open ? null : m.id)}
+              >
                 <div>
-                  <div className="entry-title">{m.chauffeurs?.nom} {m.chauffeurs?.prenom}</div>
+                  <div className="entry-title">
+                    {m.statut === 'volee' && <span style={{ color: 'var(--rejected)' }}>● </span>}
+                    {m.chauffeurs?.nom} {m.chauffeurs?.prenom}
+                  </div>
                   <div className="entry-sub">
-                    {m.plaque_immatriculation} · {m.chauffeurs?.telephone}
+                    {m.plaque_immatriculation}
                     {m.gares ? ` · ${m.gares.nom}` : ''}
                   </div>
                 </div>
-                <QRCodeSVG value={m.qr_code} size={44} bgColor="transparent" fgColor="#f2ede1" />
+                <span className="hint">{open ? '▲' : '▼'}</span>
               </div>
-              {(m.chauffeurs?.photo_url || m.photo_url) && (
-                <div className="row" style={{ marginTop: 10 }}>
-                  {m.chauffeurs?.photo_url && (
-                    <img src={m.chauffeurs.photo_url} alt="Chauffeur" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+              {open && (
+                <>
+                  <div className="entry-sub" style={{ marginTop: 6 }}>{m.chauffeurs?.telephone}</div>
+                  {(m.chauffeurs?.photo_url || m.photo_url) && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      {m.chauffeurs?.photo_url && (
+                        <img src={m.chauffeurs.photo_url} alt="Chauffeur" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+                      )}
+                      {m.photo_url && (
+                        <img src={m.photo_url} alt="Moto" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+                      )}
+                    </div>
                   )}
-                  {m.photo_url && (
-                    <img src={m.photo_url} alt="Moto" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
-                  )}
-                </div>
+                  <div className="row" style={{ marginTop: 10 }}>
+                    <QRCodeSVG value={m.qr_code} size={44} bgColor="transparent" fgColor="#f2ede1" />
+                  </div>
+                  <div className="row" style={{ marginTop: 10 }}>
+                    <button className="btn-verify" onClick={() => handleDecision(m, 'verifie')}>Valider</button>
+                    <button className="btn-reject" onClick={() => handleDecision(m, 'rejete')}>Rejeter</button>
+                  </div>
+                </>
               )}
-              <div className="row" style={{ marginTop: 10 }}>
-                <button className="btn-verify" onClick={() => handleDecision(m, 'verifie')}>Valider</button>
-                <button className="btn-reject" onClick={() => handleDecision(m, 'rejete')}>Rejeter</button>
-              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {tab === 'registre' && (
         <div className="card">
           <h2>Toutes les fiches</h2>
+          <input
+            placeholder="Rechercher un nom ou une plaque..."
+            value={rechercheRegistre}
+            onChange={(e) => setRechercheRegistre(e.target.value)}
+            style={{ marginBottom: 14 }}
+          />
           {registre.length === 0 && <p className="empty">Aucune fiche enregistrée pour l&rsquo;instant.</p>}
-          {registre.map((m) => (
+          {registre
+            .filter((m) => {
+              const q = rechercheRegistre.trim().toLowerCase();
+              if (!q) return true;
+              const hay = `${m.chauffeurs?.nom || ''} ${m.chauffeurs?.prenom || ''} ${m.plaque_immatriculation || ''}`.toLowerCase();
+              return hay.includes(q);
+            })
+            .map((m) => {
+            const open = expandedRegistre === m.id;
+            return (
             <div className="entry" key={m.id}>
-              <div className="entry-head">
+              <div
+                className="entry-head"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setExpandedRegistre(open ? null : m.id)}
+              >
                 <div>
                   <div className="entry-title">
+                    {m.statut === 'volee' && <span style={{ color: 'var(--rejected)' }}>● </span>}
                     {m.chauffeurs?.nom} {m.chauffeurs?.prenom}
-                    {m.type_moto === 'personnel' ? ' 🏍️ (personnelle)' : ''}
+                    {m.type_moto === 'personnel' ? ' 🏍️' : ''}
                   </div>
                   <div className="entry-sub">
-                    {m.plaque_immatriculation} · {m.chauffeurs?.telephone}
+                    {m.plaque_immatriculation}
                     {m.gares ? ` · ${m.gares.nom}` : ''}
                   </div>
                 </div>
-                <span className={`status status-${m.statut_verification}`}>{m.statut_verification}</span>
+                <span className="hint">{open ? '▲' : '▼'}</span>
               </div>
-              {profile.role === 'admin' && (
-                <div className="row" style={{ marginTop: 10 }}>
-                  <input
-                    placeholder="ID boîtier GPS (IMEI)"
-                    defaultValue={m.gps_boitier_id || ''}
-                    data-mono="true"
-                    id={`boitier-${m.id}`}
-                  />
-                  <button
-                    className="btn-ghost"
-                    onClick={() => handleSetBoitier(m.id, document.getElementById(`boitier-${m.id}`).value)}
-                  >
-                    Associer
-                  </button>
-                </div>
+              {open && (
+                <>
+                  <div className="entry-sub" style={{ marginTop: 6 }}>
+                    {m.chauffeurs?.telephone}
+                    {' · '}
+                    <span className={`status status-${m.statut_verification}`}>{m.statut_verification}</span>
+                  </div>
+                  {['admin', 'superadmin'].includes(profile.role) && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <input
+                        placeholder="ID boîtier GPS (IMEI)",
+                        defaultValue={m.gps_boitier_id || ''}
+                        data-mono="true"
+                        id={`boitier-${m.id}`}
+                      />
+                      <button
+                        className="btn-ghost"
+                        onClick={() => handleSetBoitier(m.id, document.getElementById(`boitier-${m.id}`).value)}
+                      >
+                        Associer
+                      </button>
+                    </div>
+                  )}
+                  {m.statut_verification !== 'en_attente' && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <button className="btn-ghost" onClick={() => handleDecision(m, 'en_attente')}>
+                        Remettre en attente
+                      </button>
+                    </div>
+                  )}
+                  <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+                    {m.statut === 'volee' ? (
+                      <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
+                        Marquer récupérée
+                      </button>
+                    ) : (
+                      <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee', m)}>
+                        Signaler volée / perdue
+                      </button>
+                    )}
+                    <button className="btn-ghost" onClick={() => handlePrintFiche(m)}>
+                      Imprimer la fiche chauffeur
+                    </button>
+                  </div>
+                </>
               )}
-              {m.statut_verification !== 'en_attente' && (
-                <div className="row" style={{ marginTop: 10 }}>
-                  <button className="btn-ghost" onClick={() => handleDecision(m, 'en_attente')}>
-                    Remettre en attente
-                  </button>
-                </div>
-              )}
-              <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-                {m.statut === 'volee' ? (
-                  <button className="btn-verify" onClick={() => handleSetStatut(m.id, 'recuperee')}>
-                    Marquer récupérée
-                  </button>
-                ) : (
-                  <button className="btn-reject" onClick={() => handleSetStatut(m.id, 'volee', m)}>
-                    Signaler volée / perdue
-                  </button>
-                )}
-                <button className="btn-ghost" onClick={() => handlePrintFiche(m)}>
-                  Imprimer la fiche chauffeur
-                </button>
-              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -782,6 +866,28 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'plateforme' && (
+        <div className="card">
+          <h2>Tous les syndicats</h2>
+          <p className="hint">Nombre de personnes inscrites par syndicat — utile pour la facturation.</p>
+          {syndicatsListe.length === 0 && <p className="empty">Aucun syndicat pour l&rsquo;instant.</p>}
+          {syndicatsListe.map((s) => (
+            <div className="entry" key={s.id}>
+              <div className="entry-head">
+                <div>
+                  <div className="entry-title">{s.nom}</div>
+                  <div className="entry-sub">
+                    {s.nbAgents || 0} agent(s) · {s.nbChauffeurs || 0} chauffeur(s) · {s.nbMotos || 0} moto(s)
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          <h2 style={{ marginTop: 28 }}>Motos personnelles (hors syndicats)</h2>
+          <p className="hint">{nbMotosPersonnelles} moto(s) personnelle(s) enregistrée(s) au total.</p>
         </div>
       )}
       {ficheAImprimer && (
