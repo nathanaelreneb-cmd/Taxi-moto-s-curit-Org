@@ -188,6 +188,7 @@ export default function Dashboard() {
         contact_urgence_telephone: form.urgence_tel.value || null,
         photo_url: photoChauffeurUrl,
         gare_id: gareId,
+        syndicat_id: profile.syndicat_id,
         qr_code: shortCode('CH'),
         saisi_par: user.id,
       })
@@ -208,6 +209,7 @@ export default function Dashboard() {
       couleur: form.couleur.value || null,
       photo_url: photoMotoUrl,
       gare_id: gareId,
+      syndicat_id: profile.syndicat_id,
       qr_code: shortCode('MT'),
       saisi_par: user.id,
     });
@@ -243,6 +245,7 @@ export default function Dashboard() {
       zone: form.gare_zone.value || null,
       responsable_nom: form.gare_resp.value || null,
       responsable_telephone: form.gare_resp_tel.value || null,
+      syndicat_id: profile.syndicat_id,
     });
     form.reset();
     loadEverything(user, profile);
@@ -738,6 +741,12 @@ export default function Dashboard() {
       {tab === 'agents' && (
         <div className="card">
           <h2>Comptes agents & responsables</h2>
+          <p className="hint">
+            Lien à partager pour qu&rsquo;un nouvel agent rejoigne <b>votre</b> syndicat :
+          </p>
+          <p className="hint" data-mono="true" style={{ wordBreak: 'break-all', color: 'var(--text)' }}>
+            {typeof window !== 'undefined' ? window.location.origin : ''}/signup?syndicat={profile.syndicat_id}
+          </p>
           {profils.length === 0 && <p className="empty">Aucun compte pour l&rsquo;instant.</p>}
           {profils.map((p) => (
             <div className="entry" key={p.id}>
