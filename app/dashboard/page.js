@@ -598,7 +598,7 @@ export default function Dashboard() {
                   {['admin', 'superadmin'].includes(profile.role) && (
                     <div className="row" style={{ marginTop: 10 }}>
                       <input
-                        placeholder="ID boîtier GPS (IMEI)",
+                        placeholder="ID boîtier GPS (IMEI)"
                         defaultValue={m.gps_boitier_id || ''}
                         data-mono="true"
                         id={`boitier-${m.id}`}
