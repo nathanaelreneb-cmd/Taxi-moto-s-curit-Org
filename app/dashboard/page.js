@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabaseClient';
 const MotoMap = dynamic(() => import('./MotoMap'), { ssr: false });
 
 function shortCode(prefix) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  return `${prefix}-${Math.random().toString(36).slice(2, 8).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
 export default function Dashboard() {
@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [signalements, setSignalements] = useState({});
   const [cniPertes, setCniPertes] = useState([]);
   const [ficheAImprimer, setFicheAImprimer] = useState(null);
+  const [horsLigne, setHorsLigne] = useState(false);
   const [expandedValider, setExpandedValider] = useState(null);
   const [expandedRegistre, setExpandedRegistre] = useState(null);
   const [rechercheRegistre, setRechercheRegistre] = useState('');
@@ -147,6 +148,19 @@ export default function Dashboard() {
         .eq('type_moto', 'personnel');
       setNbMotosPersonnelles(nbPersonnelles || 0);
     }
+  }, []);
+
+  useEffect(() => {
+    function updateStatus() {
+      setHorsLigne(!navigator.onLine);
+    }
+    updateStatus();
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    return () => {
+      window.removeEventListener('online', updateStatus);
+      window.removeEventListener('offline', updateStatus);
+    };
   }, []);
 
   useEffect(() => {
@@ -392,6 +406,22 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
+      {horsLigne && (
+        <div
+          style={{
+            background: 'var(--pending)',
+            color: '#101c1e',
+            padding: '10px 14px',
+            borderRadius: 6,
+            marginBottom: 14,
+            fontWeight: 'bold',
+            fontSize: 14,
+          }}
+        >
+          📡 Pas de connexion internet — les actions ne seront pas enregistrées tant que la
+          connexion n&rsquo;est pas revenue. Réessayez dès que le signal revient.
+        </div>
+      )}
       <div className="topbar">
         <div>
           <h1>Sécurité Taxis-Motos</h1>
